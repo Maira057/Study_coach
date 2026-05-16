@@ -276,16 +276,16 @@ def render_sidebar():
             st.rerun()
 
         if st.session_state.show_add_form:
-            with st.form(key="add_subject_form", clear_on_submit=True):
-                name = st.text_input("Subject name", placeholder="e.g. Machine Learning…")
-                submitted = st.form_submit_button("Create 🌸", use_container_width=True)
-                if submitted and name.strip():
-                    sid = f"{len(st.session_state.subjects)}_{name[:10].replace(' ','')}"
+            new_name = st.text_input("Subject name", placeholder="e.g. Machine Learning…",
+                                     key="new_subject_input")
+            if st.button("Create 🌸", type="primary", use_container_width=True, key="create_subject_btn"):
+                if new_name.strip():
+                    sid = f"{len(st.session_state.subjects)}_{new_name[:10].replace(' ','')}"
                     st.session_state.subjects[sid] = {
-                        "name": name.strip(), "exam_date": None,
+                        "name": new_name.strip(), "exam_date": None,
                         "difficulty": "Medium", "hours_per_day": "2",
                         "prior_knowledge": "", "pdf_base64": None,
-                        "pdf_name": "", "tasks": [],
+                        "pdf_name": "", "pdf_files": [], "tasks": [],
                         "plan_generated": False, "chat_messages": [],
                     }
                     st.session_state.current_subject = sid
@@ -407,58 +407,59 @@ def render_subject(sid):
 
     # SETUP
     with tab1:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown('<div class="cute-card">', unsafe_allow_html=True)
-            st.markdown("**📅 Exam Date**")
-            exam_date = st.date_input("Exam", value=subj.get("exam_date"),
-                                      key=f"exam_{sid}", label_visibility="collapsed")
-            if exam_date: subj["exam_date"] = exam_date
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("**📅 Exam Date**")
+        exam_date = st.date_input("Exam", value=subj.get("exam_date"),
+                                  key=f"exam_{sid}", label_visibility="collapsed")
+        if exam_date: subj["exam_date"] = exam_date
 
-            st.markdown('<div class="cute-card">', unsafe_allow_html=True)
-            st.markdown("**⏱ Hours per day**")
-            hours = st.select_slider("Hours", options=["1","1.5","2","3","4","5"],
-                                     value=subj.get("hours_per_day","2"),
-                                     key=f"hours_{sid}", label_visibility="collapsed")
-            subj["hours_per_day"] = hours
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("**⚡ Difficulty**")
+        diff = st.select_slider("Diff", options=["Easy","Medium","Hard"],
+                                value=subj.get("difficulty","Medium"),
+                                key=f"diff_{sid}", label_visibility="collapsed")
+        subj["difficulty"] = diff
+        dc2 = DIFF_COLORS[diff]
+        mood = "🟢 Manageable!" if diff=="Easy" else "🟡 Challenge mode!" if diff=="Medium" else "🔴 Beast mode!"
+        st.markdown(f"<span style='color:{dc2};font-weight:700;font-size:14px;'>{mood}</span>", unsafe_allow_html=True)
 
-        with c2:
-            st.markdown('<div class="cute-card">', unsafe_allow_html=True)
-            st.markdown("**⚡ Difficulty**")
-            diff = st.select_slider("Diff", options=["Easy","Medium","Hard"],
-                                    value=subj.get("difficulty","Medium"),
-                                    key=f"diff_{sid}", label_visibility="collapsed")
-            subj["difficulty"] = diff
-            dc2 = DIFF_COLORS[diff]
-            mood = "🟢 Manageable!" if diff=="Easy" else "🟡 Challenge mode!" if diff=="Medium" else "🔴 Beast mode!"
-            st.markdown(f"<span style='color:{dc2};font-weight:800;font-size:15px;'>{mood}</span>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.write("")
+        st.markdown("**⏱ Hours per day**")
+        hours = st.select_slider("Hours", options=["1","1.5","2","3","4","5"],
+                                 value=subj.get("hours_per_day","2"),
+                                 key=f"hours_{sid}", label_visibility="collapsed")
+        subj["hours_per_day"] = hours
 
-            st.markdown('<div class="cute-card">', unsafe_allow_html=True)
-            st.markdown("**📄 Course Material (PDF)**")
-            if subj.get("pdf_name"):
-                st.success(f"✓ {subj['pdf_name']}")
-                if st.button("Remove", key=f"rmpdf_{sid}"):
-                    subj["pdf_base64"] = None; subj["pdf_name"] = ""
-                    st.rerun()
-            else:
-                up = st.file_uploader("PDF", type=["pdf"], key=f"pdf_{sid}", label_visibility="collapsed")
-                if up:
-                    subj["pdf_base64"] = base64.b64encode(up.read()).decode()
-                    subj["pdf_name"]   = up.name
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="cute-card">', unsafe_allow_html=True)
+        st.write("")
         st.markdown("**🧠 Your Prior Knowledge**")
         st.caption("Tell the AI what you already know so it can build the perfect plan for you!")
         prior = st.text_area("Prior", value=subj.get("prior_knowledge",""),
                              placeholder="e.g. I know basic linear algebra but haven't touched ML yet.",
                              key=f"prior_{sid}", label_visibility="collapsed", height=90)
         subj["prior_knowledge"] = prior
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.write("")
+        st.markdown("**📄 Course Material (PDFs)**")
+        st.caption("You can select multiple PDF files at once!")
+        uploaded_files = subj.get("pdf_files", [])
+        if uploaded_files:
+            for f in uploaded_files:
+                st.success(f"✓ {f['name']}")
+            if st.button("🗑 Remove all files", key=f"rmpdf_{sid}"):
+                subj["pdf_files"] = []
+                subj["pdf_base64"] = None
+                subj["pdf_name"] = ""
+                st.rerun()
+        else:
+            ups = st.file_uploader("PDFs", type=["pdf"], key=f"pdf_{sid}",
+                                   label_visibility="collapsed", accept_multiple_files=True)
+            if ups:
+                files = []
+                for up in ups:
+                    files.append({"name": up.name, "data": base64.b64encode(up.read()).decode()})
+                subj["pdf_files"] = files
+                # keep backward compat — use first file for API calls
+                subj["pdf_base64"] = files[0]["data"]
+                subj["pdf_name"]   = files[0]["name"]
+                st.rerun()
 
         st.divider()
         lbl = "✨ Generate My Study Plan!" if not subj.get("plan_generated") else "🔄 Regenerate Study Plan"
