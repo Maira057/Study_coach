@@ -491,38 +491,41 @@ def render_subject(sid):
         st.markdown("**📄 Course Material (PDFs)**")
         existing = subj.get("pdf_files", [])
 
-        # Show already uploaded files
+        # Show uploaded files as clean pills
         if existing:
-            st.caption(f"{len(existing)} file(s) uploaded:")
             for i, f in enumerate(existing):
-                col_f, col_x = st.columns([5, 1])
+                col_f, col_x = st.columns([6, 1])
                 with col_f:
-                    st.success(f"✓ {f['name']}")
+                    st.markdown(f"<div style='background:#f3e8ff;border:1.5px solid #d8b4fe;border-radius:10px;padding:8px 14px;font-size:13px;color:#6d28d9;font-weight:600;'>📄 {f['name']}</div>", unsafe_allow_html=True)
                 with col_x:
-                    if st.button("✕", key=f"rm_{sid}_{i}"):
+                    if st.button("✕", key=f"rm_{sid}_{i}", help="Remove"):
                         subj["pdf_files"].pop(i)
-                        if subj["pdf_files"]:
-                            subj["pdf_base64"] = subj["pdf_files"][0]["data"]
-                            subj["pdf_name"]   = subj["pdf_files"][0]["name"]
-                        else:
-                            subj["pdf_base64"] = None
-                            subj["pdf_name"]   = ""
+                        subj["pdf_base64"] = subj["pdf_files"][0]["data"] if subj["pdf_files"] else None
+                        subj["pdf_name"]   = subj["pdf_files"][0]["name"] if subj["pdf_files"] else ""
                         save_to_db(st.session_state.subjects)
                         st.rerun()
+            st.write("")
 
-        # Always show uploader to add more
-        st.caption("Add a PDF (upload one at a time to add multiple):")
-        up = st.file_uploader(
-            "Add PDF", type=["pdf"],
-            key=f"pdf_{sid}_{len(existing)}",
+        # Single uploader — key changes each time so it resets cleanly after each upload
+        upload_key = f"pdf_{sid}_{len(existing)}"
+        ups = st.file_uploader(
+            "📎 Drop PDFs here — select all at once in the file picker",
+            type=["pdf"],
+            key=upload_key,
+            accept_multiple_files=True,
+            label_visibility="visible"
         )
-        if up is not None:
-            names = [f["name"] for f in existing]
-            if up.name not in names:
-                data = base64.b64encode(up.read()).decode()
-                subj["pdf_files"] = existing + [{"name": up.name, "data": data}]
-                subj["pdf_base64"] = subj["pdf_files"][0]["data"]
-                subj["pdf_name"]   = subj["pdf_files"][0]["name"]
+        if ups:
+            existing_names = {f["name"] for f in existing}
+            new_files = []
+            for up in ups:
+                if up.name not in existing_names:
+                    new_files.append({"name": up.name, "data": base64.b64encode(up.read()).decode()})
+            if new_files:
+                all_files = existing + new_files
+                subj["pdf_files"]  = all_files
+                subj["pdf_base64"] = all_files[0]["data"]
+                subj["pdf_name"]   = all_files[0]["name"]
                 save_to_db(st.session_state.subjects)
                 st.rerun()
 
