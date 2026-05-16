@@ -3,6 +3,7 @@ import anthropic
 import json
 import base64
 from datetime import date, timedelta
+import requests
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -214,11 +215,13 @@ hr         { border-color: #f0d6f5 !important; }
 
 # ── Session state ──────────────────────────────────────────────────────────────
 if "subjects" not in st.session_state:
-    st.session_state.subjects = {}
+    st.session_state.subjects = load_from_db()
 if "current_subject" not in st.session_state:
     st.session_state.current_subject = None
 if "show_add_form" not in st.session_state:
     st.session_state.show_add_form = False
+if "db_loaded" not in st.session_state:
+    st.session_state.db_loaded = True
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def days_until(exam_date):
@@ -264,6 +267,54 @@ def call_claude(messages, system="", pdf_base64=None):
     )
     return resp.content[0].text
 
+# ── Supabase ───────────────────────────────────────────────────────────────────
+FIXED_ID = "maira_study_coach"  # single-user fixed key
+
+def sb_headers():
+    return {
+        "apikey": st.secrets["SUPABASE_KEY"],
+        "Authorization": f"Bearer {st.secrets['SUPABASE_KEY']}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+def sb_url():
+    return st.secrets["SUPABASE_URL"].rstrip("/") + "/rest/v1/subjects"
+
+def load_from_db():
+    try:
+        r = requests.get(sb_url(), headers=sb_headers(),
+                         params={"id": f"eq.{FIXED_ID}"})
+        rows = r.json()
+        if rows and isinstance(rows, list) and len(rows) > 0:
+            raw = rows[0]["data"]
+            # Convert exam_date strings back to date objects
+            for sid, subj in raw.items():
+                if subj.get("exam_date"):
+                    try:
+                        subj["exam_date"] = date.fromisoformat(subj["exam_date"])
+                    except Exception:
+                        subj["exam_date"] = None
+            return raw
+    except Exception:
+        pass
+    return {}
+
+def save_to_db(subjects):
+    try:
+        # Convert date objects to strings for JSON
+        serializable = {}
+        for sid, subj in subjects.items():
+            s = dict(subj)
+            if isinstance(s.get("exam_date"), date):
+                s["exam_date"] = s["exam_date"].isoformat()
+            serializable[sid] = s
+        requests.post(sb_url(), headers=sb_headers(),
+                      json={"id": FIXED_ID, "data": serializable})
+    except Exception:
+        pass
+
+# ── Session state ──────────────────────────────────────────────────────────────
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 def render_sidebar():
     with st.sidebar:
@@ -288,6 +339,7 @@ def render_sidebar():
                         "pdf_name": "", "pdf_files": [], "tasks": [],
                         "plan_generated": False, "chat_messages": [],
                     }
+                    save_to_db(st.session_state.subjects)
                     st.session_state.current_subject = sid
                     st.session_state.show_add_form   = False
                     st.rerun()
@@ -447,6 +499,7 @@ def render_subject(sid):
                 subj["pdf_files"] = []
                 subj["pdf_base64"] = None
                 subj["pdf_name"] = ""
+                save_to_db(st.session_state.subjects)
                 st.rerun()
         else:
             ups = st.file_uploader("PDFs", type=["pdf"], key=f"pdf_{sid}",
@@ -459,6 +512,7 @@ def render_subject(sid):
                 # keep backward compat — use first file for API calls
                 subj["pdf_base64"] = files[0]["data"]
                 subj["pdf_name"]   = files[0]["name"]
+                save_to_db(st.session_state.subjects)
                 st.rerun()
 
         st.divider()
@@ -567,7 +621,9 @@ def render_task(sid, task):
     checked = st.checkbox(label, value=task.get("done", False), key=f"task_{sid}_{task_id}")
     for t in tasks:
         if t["id"] == task_id:
-            t["done"] = checked
+            if t["done"] != checked:
+                t["done"] = checked
+                save_to_db(st.session_state.subjects)
             break
 
 # ── Generate plan ──────────────────────────────────────────────────────────────
@@ -601,6 +657,7 @@ Each day: 2-4 tasks for {subj.get('hours_per_day','2')}h. Mix of read/exercise/r
                     })
             subj["tasks"]          = flat
             subj["plan_generated"] = True
+            save_to_db(st.session_state.subjects)
             st.success(f"🎉 Done! {len(flat)} tasks across {len(plan)} days!")
             st.rerun()
         except Exception as e:
@@ -619,6 +676,7 @@ Help with concepts, exercises, quizzes, exam tips. Be warm and supportive."""
         try:
             reply = call_claude(msgs, system=system, pdf_base64=use_pdf)
             msgs.append({"role":"assistant","content":reply})
+            save_to_db(st.session_state.subjects)
         except Exception as e:
             msgs.append({"role":"assistant","content":f"Something went wrong: {e}"})
 
