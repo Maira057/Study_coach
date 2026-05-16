@@ -213,15 +213,6 @@ hr         { border-color: #f0d6f5 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session state ──────────────────────────────────────────────────────────────
-if "subjects" not in st.session_state:
-    st.session_state.subjects = load_from_db()
-if "current_subject" not in st.session_state:
-    st.session_state.current_subject = None
-if "show_add_form" not in st.session_state:
-    st.session_state.show_add_form = False
-if "db_loaded" not in st.session_state:
-    st.session_state.db_loaded = True
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def days_until(exam_date):
@@ -314,7 +305,15 @@ def save_to_db(subjects):
     except Exception:
         pass
 
+
 # ── Session state ──────────────────────────────────────────────────────────────
+if "subjects" not in st.session_state:
+    st.session_state.subjects = load_from_db()
+if "current_subject" not in st.session_state:
+    st.session_state.current_subject = None
+if "show_add_form" not in st.session_state:
+    st.session_state.show_add_form = False
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 def render_sidebar():
     with st.sidebar:
