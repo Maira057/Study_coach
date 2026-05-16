@@ -1,4 +1,3 @@
-
 import streamlit as st
 import anthropic
 import json
@@ -316,20 +315,12 @@ def render_sidebar():
 # ── Landing ────────────────────────────────────────────────────────────────────
 def render_landing():
     st.write("")
-    st.markdown("# 🌸📚✨ Your Study Coach")
-    st.markdown("##### Add your subjects, upload your material, and let AI create your perfect daily study plan 🎀")
+    st.markdown("# 📚 Study Coach")
+    st.markdown("Add your subjects, upload your material, and let AI build your perfect daily study plan.")
     st.divider()
 
     if not st.session_state.subjects:
         st.write("")
-        # Welcome hero
-        c_left, c_mid, c_right = st.columns([1, 4, 1])
-        with c_mid:
-            st.markdown("## 👋 Welcome to Study Coach!")
-            st.markdown("##### Your AI-powered study bestie that turns your course material into a personalised daily study plan 🎀")
-            st.write("")
-
-        # Feature cards
         col1, col2, col3 = st.columns(3)
         with col1:
             st.info("### 📚\n**Add Your Subjects**\n\nCreate a page for each subject with its exam date and difficulty level.")
