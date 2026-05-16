@@ -4,6 +4,12 @@ import json
 import base64
 from datetime import date, timedelta
 import requests
+import io
+try:
+    import PyPDF2
+    HAS_PYPDF = True
+except ImportError:
+    HAS_PYPDF = False
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -238,7 +244,7 @@ def get_client():
         st.error("Add ANTHROPIC_API_KEY to your Streamlit secrets!")
         st.stop()
 
-def call_claude(messages, system="", pdf_base64=None):
+def call_claude(messages, system="", pdf_base64=None, max_tokens=1000):
     client = get_client()
     built = []
     for i, m in enumerate(messages):
@@ -248,15 +254,51 @@ def call_claude(messages, system="", pdf_base64=None):
                 {"type": "text", "text": m["content"]}
             ]
         else:
-            content = m["content"]
+            content = m["content"] if isinstance(m["content"], (str, list)) else m["content"]
         built.append({"role": m["role"], "content": content})
     resp = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=1000,
+        max_tokens=max_tokens,
         system=system,
         messages=built,
     )
     return resp.content[0].text
+
+# ── PDF text extraction ────────────────────────────────────────────────────────
+def extract_pdf_text(raw_bytes, filename="file.pdf"):
+    """Extract text from PDF bytes. Falls back to noting it couldn't be read."""
+    try:
+        if HAS_PYPDF:
+            reader = PyPDF2.PdfReader(io.BytesIO(raw_bytes))
+            pages = []
+            for i, page in enumerate(reader.pages):
+                t = page.extract_text()
+                if t:
+                    pages.append(f"[Page {i+1}]\n{t}")
+            text = "\n\n".join(pages)
+            if text.strip():
+                return text[:40000]  # cap at 40k chars per file
+        # fallback — store placeholder
+        return f"[Could not extract text from {filename}]"
+    except Exception as e:
+        return f"[Error reading {filename}: {e}]"
+
+def get_all_pdf_text(subj, max_chars=80000):
+    """Combine text from all uploaded PDFs, trimmed to fit context."""
+    files = subj.get("pdf_files", [])
+    if not files:
+        return None
+    parts = []
+    total = 0
+    for f in files:
+        text = f.get("text", "")
+        label = f"\n\n=== FILE: {f['name']} ===\n{text}"
+        if total + len(label) > max_chars:
+            parts.append(f"\n\n=== FILE: {f['name']} === [truncated — too large]")
+            break
+        parts.append(label)
+        total += len(label)
+    return "".join(parts) if parts else None
 
 # ── Supabase ───────────────────────────────────────────────────────────────────
 FIXED_ID = "maira_study_coach"  # single-user fixed key
@@ -506,25 +548,29 @@ def render_subject(sid):
                         st.rerun()
             st.write("")
 
-        # Single uploader — key changes each time so it resets cleanly after each upload
         upload_key = f"pdf_{sid}_{len(existing)}"
         ups = st.file_uploader(
-            "📎 Drop PDFs here — select all at once in the file picker",
+            "📎 Select all your PDFs at once (lectures, scripts, exercises)",
             type=["pdf"],
             key=upload_key,
             accept_multiple_files=True,
-            label_visibility="visible"
         )
         if ups:
             existing_names = {f["name"] for f in existing}
             new_files = []
-            for up in ups:
+            progress = st.progress(0, text="Reading PDFs…")
+            for idx, up in enumerate(ups):
                 if up.name not in existing_names:
-                    new_files.append({"name": up.name, "data": base64.b64encode(up.read()).decode()})
+                    raw = up.read()
+                    text = extract_pdf_text(raw, up.name)
+                    new_files.append({"name": up.name, "text": text})
+                progress.progress((idx + 1) / len(ups), text=f"Reading {up.name}…")
+            progress.empty()
             if new_files:
                 all_files = existing + new_files
                 subj["pdf_files"]  = all_files
-                subj["pdf_base64"] = all_files[0]["data"]
+                # keep legacy fields for chat compat
+                subj["pdf_base64"] = None
                 subj["pdf_name"]   = all_files[0]["name"]
                 save_to_db(st.session_state.subjects)
                 st.rerun()
@@ -647,15 +693,27 @@ def generate_plan(sid):
     pdf_files = subj.get("pdf_files", [])
     has_pdfs = len(pdf_files) > 0
     pdf_names = ", ".join(f["name"] for f in pdf_files) if has_pdfs else ""
-    with st.spinner("🌸 Reading your material and building your study plan…"):
+    pdf_text = get_all_pdf_text(subj)
+    with st.spinner(f"🌸 Building your study plan across {days} days… ⏳"):
+        material_section = ""
+        if pdf_text:
+            material_section = f"""
+Here is the full course material extracted from the uploaded PDFs:
+<course_material>
+{pdf_text}
+</course_material>
+Use this material to:
+- Reference specific topics, lecture names, page/slide numbers in every task
+- Identify exam topics, past exam questions, or exam format info and prioritise them
+- Use any intro/overview lecture to understand the full subject structure
+- Spread all lectures and topics logically across the {min(days,30)} days"""
+        else:
+            material_section = "No material uploaded — create well-structured generic tasks."
+
         prompt = f"""You are an expert study planner. The student has {days} days until their {subj['name']} exam.
 Difficulty: {subj.get('difficulty','Medium')}. Hours per day: {subj.get('hours_per_day','2')}h.
 Prior knowledge: {subj.get('prior_knowledge') or 'some basics'}.
-{"Uploaded PDFs: " + pdf_names + ". All PDFs are attached. Read them carefully and:" if has_pdfs else "No material uploaded — create well-structured tasks."}
-{"- Reference specific content (e.g. 'Read slides 12-20 on Gradient Descent', 'Solve exercise 3.2 page 45')" if has_pdfs else ""}
-{"- If any PDF mentions exam topics, exam format, or past exam questions — prioritise those in the plan" if has_pdfs else ""}
-{"- If a PDF is a general intro/overview lecture, use it to understand the subject structure" if has_pdfs else ""}
-{"- Spread the lectures/topics logically across days" if has_pdfs else ""}
+{material_section}
 
 Return ONLY a valid JSON array (no markdown, no backticks) like:
 [
@@ -663,18 +721,10 @@ Return ONLY a valid JSON array (no markdown, no backticks) like:
   ...
 ]
 Create {min(days, 30)} day entries starting from today ({date.today().isoformat()}).
-Each day: 2-4 tasks for {subj.get('hours_per_day','2')}h. Mix of read/exercise/review/practice/quiz. Be very specific, name the actual topics and page/slide numbers."""
+Each day: 2-4 tasks for {subj.get('hours_per_day','2')}h. Mix of read/exercise/review/practice/quiz. Be very specific with topic names and page/slide numbers."""
         try:
-            # Send all PDFs to Claude
-            if has_pdfs:
-                user_content = []
-                for f in pdf_files:
-                    user_content.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": f["data"]}})
-                user_content.append({"type": "text", "text": prompt})
-                msgs = [{"role": "user", "content": user_content}]
-            else:
-                msgs = [{"role": "user", "content": prompt}]
-            text  = call_claude(msgs)
+            msgs = [{"role": "user", "content": prompt}]
+            text = call_claude(msgs, max_tokens=4000)
             clean = text.strip().replace("```json","").replace("```","").strip()
             plan  = json.loads(clean)
             flat  = []
@@ -691,7 +741,11 @@ Each day: 2-4 tasks for {subj.get('hours_per_day','2')}h. Mix of read/exercise/r
             st.success(f"🎉 Done! {len(flat)} tasks across {len(plan)} days!")
             st.rerun()
         except Exception as e:
-            st.error(f"Oops! Something went wrong: {e}")
+            err = str(e)
+            if "502" in err or "Bad Gateway" in err or "timeout" in err.lower():
+                st.error("⏱ The request timed out — your PDFs may be too large. Try with fewer or smaller PDFs, or generate without PDFs first.")
+            else:
+                st.error(f"Something went wrong: {err}")
 
 # ── Send chat ──────────────────────────────────────────────────────────────────
 def send_chat(sid, user_input):
@@ -699,23 +753,14 @@ def send_chat(sid, user_input):
     msgs = subj.setdefault("chat_messages", [])
     pdf_files = subj.get("pdf_files", [])
     has_pdfs = len(pdf_files) > 0
+    pdf_text = get_all_pdf_text(subj)
     system = f"""You are a friendly, encouraging study tutor for "{subj['name']}".
-{("The student uploaded " + str(len(pdf_files)) + " PDF file(s) with their course material. Use them for specific, accurate answers. Reference slide numbers, page numbers, or exercise numbers where relevant. If the PDFs mention exam format or exam topics, highlight those when relevant.") if has_pdfs else "No material uploaded."}
+{("Here is the student's full course material:\n<course_material>\n" + pdf_text + "\n</course_material>\nUse it for specific, accurate answers. Reference slide numbers, page numbers, and exercise numbers. Highlight exam-relevant topics when useful.") if pdf_text else "No material uploaded."}
 Help with concepts, exercises, quizzes, exam tips. Be warm, clear and supportive. Use examples."""
-    # On first message, attach all PDFs
-    is_first = len(msgs) == 0
     msgs.append({"role":"user","content":user_input})
     with st.spinner("🤔 Thinking…"):
         try:
-            if is_first and has_pdfs:
-                user_content = []
-                for f in pdf_files:
-                    user_content.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": f["data"]}})
-                user_content.append({"type": "text", "text": user_input})
-                api_msgs = [{"role": "user", "content": user_content}]
-            else:
-                api_msgs = msgs
-            reply = call_claude(api_msgs, system=system)
+            reply = call_claude(msgs, system=system)
             msgs.append({"role":"assistant","content":reply})
             save_to_db(st.session_state.subjects)
         except Exception as e:
