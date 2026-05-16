@@ -48,7 +48,21 @@ st.markdown("""
 [data-testid="stSidebar"] .stButton > button:hover {
     background: #f9eeff !important;
     border-color: #c084e8 !important;
+    color: #7c4d99 !important;
     transform: translateX(3px) !important;
+}
+[data-testid="stSidebar"] .stButton > button:focus,
+[data-testid="stSidebar"] .stButton > button:active {
+    background: #f9eeff !important;
+    border-color: #c084e8 !important;
+    color: #7c4d99 !important;
+}
+
+/* ── Hide Material icon text that leaks ── */
+[data-testid="stSidebarCollapseButton"] span,
+button[aria-label="Close sidebar"] span,
+[data-testid="collapsedControl"] span {
+    display: none !important;
 }
 
 /* ── Primary buttons ── */
@@ -63,8 +77,15 @@ st.markdown("""
     transition: all 0.2s !important;
 }
 .stButton > button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #e879f9, #a855f7) !important;
+    color: white !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 6px 20px rgba(168,85,247,0.45) !important;
+}
+.stButton > button[kind="primary"]:focus,
+.stButton > button[kind="primary"]:active {
+    background: linear-gradient(135deg, #e879f9, #a855f7) !important;
+    color: white !important;
 }
 
 .stButton > button {
@@ -251,9 +272,25 @@ def render_sidebar():
         st.divider()
 
         if st.button("＋ New Subject ✨", use_container_width=True, type="primary"):
-            st.session_state.show_add_form = True
-            st.session_state.current_subject = None
+            st.session_state.show_add_form = not st.session_state.show_add_form
             st.rerun()
+
+        if st.session_state.show_add_form:
+            with st.form(key="add_subject_form", clear_on_submit=True):
+                name = st.text_input("Subject name", placeholder="e.g. Machine Learning…")
+                submitted = st.form_submit_button("Create 🌸", use_container_width=True)
+                if submitted and name.strip():
+                    sid = f"{len(st.session_state.subjects)}_{name[:10].replace(' ','')}"
+                    st.session_state.subjects[sid] = {
+                        "name": name.strip(), "exam_date": None,
+                        "difficulty": "Medium", "hours_per_day": "2",
+                        "prior_knowledge": "", "pdf_base64": None,
+                        "pdf_name": "", "tasks": [],
+                        "plan_generated": False, "chat_messages": [],
+                    }
+                    st.session_state.current_subject = sid
+                    st.session_state.show_add_form   = False
+                    st.rerun()
 
         st.markdown("<p style='color:#9d75c2;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;margin:16px 0 8px;'>My Subjects</p>", unsafe_allow_html=True)
 
@@ -269,11 +306,10 @@ def render_sidebar():
                 st.session_state.show_add_form   = False
                 st.rerun()
 
-        if st.session_state.current_subject or st.session_state.show_add_form:
+        if st.session_state.current_subject:
             st.divider()
             if st.button("🏠 Home", use_container_width=True):
                 st.session_state.current_subject = None
-                st.session_state.show_add_form   = False
                 st.rerun()
 
 # ── Landing ────────────────────────────────────────────────────────────────────
@@ -291,39 +327,61 @@ def render_landing():
     </div>
     """, unsafe_allow_html=True)
 
-    if st.session_state.show_add_form:
-        st.markdown('<div class="cute-card">', unsafe_allow_html=True)
-        st.markdown("### ✨ Add a New Subject")
-        name = st.text_input("Subject name", placeholder="e.g. Machine Learning, Analysis II…", key="new_name")
-        c1, c2, _ = st.columns([1, 1, 3])
-        with c1:
-            if st.button("Create 🌸", type="primary"):
-                if name.strip():
-                    sid = f"{len(st.session_state.subjects)}_{name[:10].replace(' ','')}"
-                    st.session_state.subjects[sid] = {
-                        "name": name.strip(), "exam_date": None,
-                        "difficulty": "Medium", "hours_per_day": "2",
-                        "prior_knowledge": "", "pdf_base64": None,
-                        "pdf_name": "", "tasks": [],
-                        "plan_generated": False, "chat_messages": [],
-                    }
-                    st.session_state.current_subject = sid
-                    st.session_state.show_add_form   = False
-                    st.rerun()
-        with c2:
-            if st.button("Cancel"):
-                st.session_state.show_add_form = False
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
     if not st.session_state.subjects:
         st.markdown("""
-        <div style="text-align:center;padding:60px 20px;background:white;
-                    border-radius:24px;border:2px dashed #e9d5ff;margin-top:20px;">
-            <div style="font-size:48px;margin-bottom:16px;">🌱</div>
-            <p style="font-family:'Quicksand',sans-serif;font-size:18px;font-weight:700;color:#9d75c2;">
-                No subjects yet!</p>
-            <p style="color:#c4a8e0;font-size:14px;">Click "+ New Subject" in the sidebar ✨</p>
+        <div style="background:white;border:2px solid #f0d6f5;border-radius:28px;
+                    padding:40px 48px;margin-top:10px;
+                    box-shadow:0 8px 32px rgba(168,85,247,0.08);">
+
+            <div style="text-align:center;margin-bottom:36px;">
+                <div style="font-size:52px;margin-bottom:10px;">👋</div>
+                <h2 style="font-family:'Quicksand',sans-serif;font-size:28px;font-weight:800;
+                            color:#7c3aed;margin-bottom:8px;">Welcome to Study Coach!</h2>
+                <p style="color:#9d75c2;font-size:15px;max-width:460px;margin:0 auto;line-height:1.6;">
+                    Your AI-powered study bestie that turns your course material into a
+                    personalised daily study plan 🎀
+                </p>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:36px;">
+                <div style="background:linear-gradient(135deg,#fdf4ff,#faf5ff);border:2px solid #e9d5ff;
+                            border-radius:20px;padding:20px;text-align:center;">
+                    <div style="font-size:32px;margin-bottom:8px;">📚</div>
+                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#7c3aed;
+                                font-size:15px;margin-bottom:6px;">Add Your Subjects</div>
+                    <div style="color:#9d75c2;font-size:13px;line-height:1.5;">
+                        Create a page for each subject with its exam date and difficulty
+                    </div>
+                </div>
+                <div style="background:linear-gradient(135deg,#f0f9ff,#f5f0ff);border:2px solid #bae6fd;
+                            border-radius:20px;padding:20px;text-align:center;">
+                    <div style="font-size:32px;margin-bottom:8px;">📄</div>
+                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#0369a1;
+                                font-size:15px;margin-bottom:6px;">Upload Your Material</div>
+                    <div style="color:#6b9cb8;font-size:13px;line-height:1.5;">
+                        Upload your lecture PDFs and the AI reads them to plan specifically for you
+                    </div>
+                </div>
+                <div style="background:linear-gradient(135deg,#fff0f8,#fdf4ff);border:2px solid #fbcfe8;
+                            border-radius:20px;padding:20px;text-align:center;">
+                    <div style="font-size:32px;margin-bottom:8px;">✅</div>
+                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#be185d;
+                                font-size:15px;margin-bottom:6px;">Get Your Daily Plan</div>
+                    <div style="color:#b07090;font-size:13px;line-height:1.5;">
+                        A day-by-day checklist with specific tasks — just tick them off as you go!
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align:center;background:linear-gradient(135deg,#fdf4ff,#faf5ff);
+                        border:2px dashed #d8b4fe;border-radius:20px;padding:24px;">
+                <div style="font-size:28px;margin-bottom:8px;">🌱</div>
+                <p style="font-family:'Quicksand',sans-serif;font-size:16px;font-weight:700;
+                           color:#7c3aed;margin-bottom:4px;">Ready to start?</p>
+                <p style="color:#9d75c2;font-size:13px;">
+                    Click <strong style="color:#a855f7;">+ New Subject</strong> in the sidebar to add your first subject ✨
+                </p>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         return
