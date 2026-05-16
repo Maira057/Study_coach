@@ -1,3 +1,4 @@
+
 import streamlit as st
 import anthropic
 import json
@@ -314,76 +315,31 @@ def render_sidebar():
 
 # ── Landing ────────────────────────────────────────────────────────────────────
 def render_landing():
-    st.markdown("""
-    <div style="text-align:center;padding:40px 0 30px;">
-        <div style="font-size:56px;margin-bottom:12px;">🌸📚✨</div>
-        <h1 style="font-family:'Quicksand',sans-serif;font-size:42px;font-weight:800;
-                   background:linear-gradient(135deg,#e879f9,#a855f7,#6366f1);
-                   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                   margin-bottom:10px;">Your Study Coach</h1>
-        <p style="color:#9d75c2;font-size:16px;font-weight:600;max-width:480px;margin:0 auto;">
-            Add your subjects, upload your material, and let AI create your perfect daily study plan 🎀
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.write("")
+    st.markdown("# 🌸📚✨ Your Study Coach")
+    st.markdown("##### Add your subjects, upload your material, and let AI create your perfect daily study plan 🎀")
+    st.divider()
 
     if not st.session_state.subjects:
-        st.markdown("""
-        <div style="background:white;border:2px solid #f0d6f5;border-radius:28px;
-                    padding:40px 48px;margin-top:10px;
-                    box-shadow:0 8px 32px rgba(168,85,247,0.08);">
+        st.write("")
+        # Welcome hero
+        c_left, c_mid, c_right = st.columns([1, 4, 1])
+        with c_mid:
+            st.markdown("## 👋 Welcome to Study Coach!")
+            st.markdown("##### Your AI-powered study bestie that turns your course material into a personalised daily study plan 🎀")
+            st.write("")
 
-            <div style="text-align:center;margin-bottom:36px;">
-                <div style="font-size:52px;margin-bottom:10px;">👋</div>
-                <h2 style="font-family:'Quicksand',sans-serif;font-size:28px;font-weight:800;
-                            color:#7c3aed;margin-bottom:8px;">Welcome to Study Coach!</h2>
-                <p style="color:#9d75c2;font-size:15px;max-width:460px;margin:0 auto;line-height:1.6;">
-                    Your AI-powered study bestie that turns your course material into a
-                    personalised daily study plan 🎀
-                </p>
-            </div>
+        # Feature cards
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("### 📚\n**Add Your Subjects**\n\nCreate a page for each subject with its exam date and difficulty level.")
+        with col2:
+            st.info("### 📄\n**Upload Your Material**\n\nUpload your lecture PDFs and the AI reads them to plan specifically for you.")
+        with col3:
+            st.info("### ✅\n**Get Your Daily Plan**\n\nA day-by-day checklist with specific tasks — just tick them off as you go!")
 
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:36px;">
-                <div style="background:linear-gradient(135deg,#fdf4ff,#faf5ff);border:2px solid #e9d5ff;
-                            border-radius:20px;padding:20px;text-align:center;">
-                    <div style="font-size:32px;margin-bottom:8px;">📚</div>
-                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#7c3aed;
-                                font-size:15px;margin-bottom:6px;">Add Your Subjects</div>
-                    <div style="color:#9d75c2;font-size:13px;line-height:1.5;">
-                        Create a page for each subject with its exam date and difficulty
-                    </div>
-                </div>
-                <div style="background:linear-gradient(135deg,#f0f9ff,#f5f0ff);border:2px solid #bae6fd;
-                            border-radius:20px;padding:20px;text-align:center;">
-                    <div style="font-size:32px;margin-bottom:8px;">📄</div>
-                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#0369a1;
-                                font-size:15px;margin-bottom:6px;">Upload Your Material</div>
-                    <div style="color:#6b9cb8;font-size:13px;line-height:1.5;">
-                        Upload your lecture PDFs and the AI reads them to plan specifically for you
-                    </div>
-                </div>
-                <div style="background:linear-gradient(135deg,#fff0f8,#fdf4ff);border:2px solid #fbcfe8;
-                            border-radius:20px;padding:20px;text-align:center;">
-                    <div style="font-size:32px;margin-bottom:8px;">✅</div>
-                    <div style="font-family:'Quicksand',sans-serif;font-weight:800;color:#be185d;
-                                font-size:15px;margin-bottom:6px;">Get Your Daily Plan</div>
-                    <div style="color:#b07090;font-size:13px;line-height:1.5;">
-                        A day-by-day checklist with specific tasks — just tick them off as you go!
-                    </div>
-                </div>
-            </div>
-
-            <div style="text-align:center;background:linear-gradient(135deg,#fdf4ff,#faf5ff);
-                        border:2px dashed #d8b4fe;border-radius:20px;padding:24px;">
-                <div style="font-size:28px;margin-bottom:8px;">🌱</div>
-                <p style="font-family:'Quicksand',sans-serif;font-size:16px;font-weight:700;
-                           color:#7c3aed;margin-bottom:4px;">Ready to start?</p>
-                <p style="color:#9d75c2;font-size:13px;">
-                    Click <strong style="color:#a855f7;">+ New Subject</strong> in the sidebar to add your first subject ✨
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.write("")
+        st.success("🌱  **Ready to start?** Click **+ New Subject** in the sidebar to add your first subject ✨")
         return
 
     cols = st.columns(min(len(st.session_state.subjects), 3))
